@@ -14,7 +14,7 @@ import { AuthInterceptor } from "./src/interceptor.js";
 import { startA2AServer } from "./src/server.js";
 import { loadA2AConfig, getDefaultConfig } from "./src/config.js";
 import { setLogger, log } from "./src/utils/logger.js";
-import { createA2ATools } from "./src/tools/index.js";
+import { a2a_send, a2a_discover, a2a_task_status, a2a_cancel, initA2ATools } from "./src/tools/a2a-tools.js";
 
 // Plugin type - simplified for compatibility
 type OpenCodePlugin = (ctx: any) => Promise<any>;
@@ -57,7 +57,7 @@ export const A2APlugin: OpenCodePlugin = async (ctx) => {
   };
 
   // Lazy client getter
-  const getClient = async () => {
+  const clientGetter = async () => {
     if (!clientState.client && config.agentUrl) {
       clientState.client = await clientState.factory.createFromUrl(config.agentUrl);
     }
@@ -94,17 +94,16 @@ export const A2APlugin: OpenCodePlugin = async (ctx) => {
     await startA2AServer(config, logger, client);
   }
 
-  // Create A2A tools
-  const a2aTools = createA2ATools({
-    config,
-    logger,
-    getClient,
-  });
+  // Initialize A2A tools with config
+  initA2ATools(config, clientGetter);
 
   return {
-    // Custom tools
+    // Custom tools - import from a2a-tools.ts
     tool: {
-      ...a2aTools,
+      a2a_send,
+      a2a_discover,
+      a2a_task_status,
+      a2a_cancel,
     },
 
     // Config hook - modify OpenCode configuration
@@ -140,5 +139,5 @@ export const A2APlugin: OpenCodePlugin = async (ctx) => {
 export default A2APlugin;
 
 // Re-export utilities
-export { createA2AClient, sendToA2AAgent, streamFromA2AAgent, fetchAgentCard } from "./src/client.js";
+export { sendToA2AAgent, fetchAgentCard } from "./src/client.js";
 export type { A2APluginConfig } from "./src/types.js";
