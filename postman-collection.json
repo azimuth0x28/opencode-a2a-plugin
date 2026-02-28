@@ -1,267 +1,267 @@
 {
-  "info": {
-    "name": "A2A Protocol - OpenCode Plugin",
-    "description": "Postman collection for testing A2A Protocol plugin for OpenCode\n\nDocumentation: https://a2a-protocol.org/v0.3.0/specification/\n\nEndpoints:\n- Agent Card: GET /.well-known/agent-card.json\n- JSON-RPC: POST /a2a/jsonrpc\n- REST: POST /a2a/rest",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-  },
-  "variable": [
-    {
-      "key": "baseUrl",
-      "value": "http://localhost:4000",
-      "type": "string"
-    }
-  ],
-  "item": [
-    {
-      "name": "Agent Discovery",
-      "item": [
-        {
-          "name": "Get Agent Card",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{baseUrl}}/.well-known/agent-card.json",
-              "host": ["{{baseUrl}}"],
-              "path": [".well-known", "agent-card.json"]
-            }
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "JSON-RPC Transport",
-      "item": [
-        {
-          "name": "Send Message (message/send)",
-          "request": {
-            "method": "POST",
-            "url": {
-              "raw": "{{baseUrl}}/a2a/jsonrpc",
-              "host": ["{{baseUrl}}"],
-              "path": ["a2a", "jsonrpc"]
-            },
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"1\",\n  \"method\": \"message/send\",\n  \"params\": {\n    \"message\": {\n      \"kind\": \"message\",\n      \"messageId\": \"msg-001\",\n      \"role\": \"user\",\n      \"parts\": [\n        {\n          \"kind\": \"text\",\n          \"text\": \"Hello! Can you help me write a function?\"\n        }\n      ]\n    }\n  }\n}"
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Task Status (tasks/get)",
-          "request": {
-            "method": "POST",
-            "url": {
-              "raw": "{{baseUrl}}/a2a/jsonrpc",
-              "host": ["{{baseUrl}}"],
-              "path": ["a2a", "jsonrpc"]
-            },
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"2\",\n  \"method\": \"tasks/get\",\n  \"params\": {\n    \"id\": \"task-123\"\n  }\n}"
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Cancel Task (tasks/cancel)",
-          "request": {
-            "method": "POST",
-            "url": {
-              "raw": "{{baseUrl}}/a2a/jsonrpc",
-              "host": ["{{baseUrl}}"],
-              "path": ["a2a", "jsonrpc"]
-            },
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"3\",\n  \"method\": \"tasks/cancel\",\n  \"params\": {\n    \"id\": \"task-123\"\n  }\n}"
-            }
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "REST Transport",
-      "item": [
-        {
-          "name": "Send Message (REST)",
-          "request": {
-            "method": "POST",
-            "url": {
-              "raw": "{{baseUrl}}/a2a/rest/message:send",
-              "host": ["{{baseUrl}}"],
-              "path": ["a2a", "rest", "message:send"]
-            },
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"message\": {\n    \"kind\": \"message\",\n    \"messageId\": \"msg-002\",\n    \"role\": \"user\",\n    \"parts\": [\n      {\n        \"kind\": \"text\",\n        \"text\": \"What is 2 + 2?\"\n      }\n    ]\n  }\n}"
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Task (REST)",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{baseUrl}}/a2a/rest/tasks/task-123",
-              "host": ["{{baseUrl}}"],
-              "path": ["a2a", "rest", "tasks", "task-123"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Cancel Task (REST)",
-          "request": {
-            "method": "POST",
-            "url": {
-              "raw": "{{baseUrl}}/a2a/rest/tasks/task-123:cancel",
-              "host": ["{{baseUrl}}"],
-              "path": ["a2a", "rest", "tasks", "task-123:cancel"]
-            },
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{}"
-            }
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Streaming",
-      "item": [
-        {
-          "name": "Stream Message (REST)",
-          "request": {
-            "method": "POST",
-            "url": {
-              "raw": "{{baseUrl}}/a2a/rest/message:stream",
-              "host": ["{{baseUrl}}"],
-              "path": ["a2a", "rest", "message:stream"]
-            },
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Accept",
-                "value": "text/event-stream"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"message\": {\n    \"kind\": \"message\",\n    \"messageId\": \"msg-stream-001\",\n    \"role\": \"user\",\n    \"parts\": [\n      {\n        \"kind\": \"text\",\n        \"text\": \"Tell me a story\"\n      }\n    ]\n  }\n}"
-            }
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Push Notifications",
-      "item": [
-        {
-          "name": "Set Push Notification Config",
-          "request": {
-            "method": "POST",
-            "url": {
-              "raw": "{{baseUrl}}/a2a/jsonrpc",
-              "host": ["{{baseUrl}}"],
-              "path": ["a2a", "jsonrpc"]
-            },
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"10\",\n  \"method\": \"tasks/pushNotificationConfig/set\",\n  \"params\": {\n    \"taskId\": \"task-123\",\n    \"pushNotificationConfig\": {\n      \"url\": \"https://my-server.com/webhook\",\n      \"authentication\": {\n        \"scheme\": \"Bearer\",\n        \"credential\": \"my-token\"\n      }\n    }\n  }\n}"
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Push Notification Config",
-          "request": {
-            "method": "POST",
-            "url": {
-              "raw": "{{baseUrl}}/a2a/jsonrpc",
-              "host": ["{{baseUrl}}"],
-              "path": ["a2a", "jsonrpc"]
-            },
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"11\",\n  \"method\": \"tasks/pushNotificationConfig/get\",\n  \"params\": {\n    \"taskId\": \"task-123\"\n  }\n}"
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Delete Push Notification Config",
-          "request": {
-            "method": "POST",
-            "url": {
-              "raw": "{{baseUrl}}/a2a/jsonrpc",
-              "host": ["{{baseUrl}}"],
-              "path": ["a2a", "jsonrpc"]
-            },
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"12\",\n  \"method\": \"tasks/pushNotificationConfig/delete\",\n  \"params\": {\n    \"taskId\": \"task-123\"\n  }\n}"
-            }
-          },
-          "response": []
-        }
-      ]
-    }
-  ]
+	"info": {
+		"name": "A2A Protocol - OpenCode Plugin",
+		"description": "Postman collection for testing A2A Protocol plugin for OpenCode\n\nDocumentation: https://a2a-protocol.org/v0.3.0/specification/\n\nEndpoints:\n- Agent Card: GET /.well-known/agent-card.json\n- JSON-RPC: POST /a2a/jsonrpc\n- REST: POST /a2a/rest",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:4000",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Agent Discovery",
+			"item": [
+				{
+					"name": "Get Agent Card",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{baseUrl}}/.well-known/agent-card.json",
+							"host": ["{{baseUrl}}"],
+							"path": [".well-known", "agent-card.json"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "JSON-RPC Transport",
+			"item": [
+				{
+					"name": "Send Message (message/send)",
+					"request": {
+						"method": "POST",
+						"url": {
+							"raw": "{{baseUrl}}/a2a/jsonrpc",
+							"host": ["{{baseUrl}}"],
+							"path": ["a2a", "jsonrpc"]
+						},
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"1\",\n  \"method\": \"message/send\",\n  \"params\": {\n    \"message\": {\n      \"kind\": \"message\",\n      \"messageId\": \"msg-001\",\n      \"role\": \"user\",\n      \"parts\": [\n        {\n          \"kind\": \"text\",\n          \"text\": \"Hello! Can you help me write a function?\"\n        }\n      ]\n    }\n  }\n}"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Task Status (tasks/get)",
+					"request": {
+						"method": "POST",
+						"url": {
+							"raw": "{{baseUrl}}/a2a/jsonrpc",
+							"host": ["{{baseUrl}}"],
+							"path": ["a2a", "jsonrpc"]
+						},
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"2\",\n  \"method\": \"tasks/get\",\n  \"params\": {\n    \"id\": \"task-123\"\n  }\n}"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Cancel Task (tasks/cancel)",
+					"request": {
+						"method": "POST",
+						"url": {
+							"raw": "{{baseUrl}}/a2a/jsonrpc",
+							"host": ["{{baseUrl}}"],
+							"path": ["a2a", "jsonrpc"]
+						},
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"3\",\n  \"method\": \"tasks/cancel\",\n  \"params\": {\n    \"id\": \"task-123\"\n  }\n}"
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "REST Transport",
+			"item": [
+				{
+					"name": "Send Message (REST)",
+					"request": {
+						"method": "POST",
+						"url": {
+							"raw": "{{baseUrl}}/a2a/rest/message:send",
+							"host": ["{{baseUrl}}"],
+							"path": ["a2a", "rest", "message:send"]
+						},
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"message\": {\n    \"kind\": \"message\",\n    \"messageId\": \"msg-002\",\n    \"role\": \"user\",\n    \"parts\": [\n      {\n        \"kind\": \"text\",\n        \"text\": \"What is 2 + 2?\"\n      }\n    ]\n  }\n}"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Task (REST)",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{baseUrl}}/a2a/rest/tasks/task-123",
+							"host": ["{{baseUrl}}"],
+							"path": ["a2a", "rest", "tasks", "task-123"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Cancel Task (REST)",
+					"request": {
+						"method": "POST",
+						"url": {
+							"raw": "{{baseUrl}}/a2a/rest/tasks/task-123:cancel",
+							"host": ["{{baseUrl}}"],
+							"path": ["a2a", "rest", "tasks", "task-123:cancel"]
+						},
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Streaming",
+			"item": [
+				{
+					"name": "Stream Message (REST)",
+					"request": {
+						"method": "POST",
+						"url": {
+							"raw": "{{baseUrl}}/a2a/rest/message:stream",
+							"host": ["{{baseUrl}}"],
+							"path": ["a2a", "rest", "message:stream"]
+						},
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "text/event-stream"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"message\": {\n    \"kind\": \"message\",\n    \"messageId\": \"msg-stream-001\",\n    \"role\": \"user\",\n    \"parts\": [\n      {\n        \"kind\": \"text\",\n        \"text\": \"Tell me a story\"\n      }\n    ]\n  }\n}"
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Push Notifications",
+			"item": [
+				{
+					"name": "Set Push Notification Config",
+					"request": {
+						"method": "POST",
+						"url": {
+							"raw": "{{baseUrl}}/a2a/jsonrpc",
+							"host": ["{{baseUrl}}"],
+							"path": ["a2a", "jsonrpc"]
+						},
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"10\",\n  \"method\": \"tasks/pushNotificationConfig/set\",\n  \"params\": {\n    \"taskId\": \"task-123\",\n    \"pushNotificationConfig\": {\n      \"url\": \"https://my-server.com/webhook\",\n      \"authentication\": {\n        \"scheme\": \"Bearer\",\n        \"credential\": \"my-token\"\n      }\n    }\n  }\n}"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Push Notification Config",
+					"request": {
+						"method": "POST",
+						"url": {
+							"raw": "{{baseUrl}}/a2a/jsonrpc",
+							"host": ["{{baseUrl}}"],
+							"path": ["a2a", "jsonrpc"]
+						},
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"11\",\n  \"method\": \"tasks/pushNotificationConfig/get\",\n  \"params\": {\n    \"taskId\": \"task-123\"\n  }\n}"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Push Notification Config",
+					"request": {
+						"method": "POST",
+						"url": {
+							"raw": "{{baseUrl}}/a2a/jsonrpc",
+							"host": ["{{baseUrl}}"],
+							"path": ["a2a", "jsonrpc"]
+						},
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"12\",\n  \"method\": \"tasks/pushNotificationConfig/delete\",\n  \"params\": {\n    \"taskId\": \"task-123\"\n  }\n}"
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	]
 }
