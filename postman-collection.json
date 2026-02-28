@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "A2A Protocol - OpenCode Plugin",
-    "description": "Коллекция для тестирования A2A плагина OpenCode\n\nДокументация: https://a2a-protocol.org/v0.3.0/specification/",
+    "description": "Postman collection for testing A2A Protocol plugin for OpenCode\n\nDocumentation: https://a2a-protocol.org/v0.3.0/specification/\n\nEndpoints:\n- Agent Card: GET /.well-known/agent-card.json\n- JSON-RPC: POST /a2a/jsonrpc\n- REST: POST /a2a/rest",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
