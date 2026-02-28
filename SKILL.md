@@ -9,123 +9,148 @@ This plugin provides OpenCode with support for the A2A (Agent-to-Agent) Protocol
 - **Agent Discovery**: Fetch and parse Agent Cards from remote agents
 - **Streaming Support**: Real-time streaming of agent responses
 - **Authentication**: Support for Bearer tokens and API keys
+- **Custom Tools**: Built-in tools for agent interaction
 
 ## Installation
 
 ```bash
-cd ~/.config/opencode/plugins/a2a
+cd ~/.config/opencode/plugin/a2a
 npm install
+npm run build
 ```
 
 ## Configuration
 
-Add the plugin to your `opencode.json`:
+Add the plugin to your `opencode.jsonc`:
 
-```json
+```jsonc
 {
   "plugin": [
-    "./plugins/a2a"
-  ],
-  "a2a": {
-    "agentUrl": "http://localhost:4000",
-    "authToken": "your-auth-token"
-  }
+    "./plugin/a2a"
+  ]
+}
+```
+
+Create `~/.config/opencode/a2a.jsonc`:
+
+```jsonc
+{
+  // A2A Agent URL to connect to
+  "agentUrl": "http://localhost:4000",
+  
+  // Authentication
+  "authToken": "",
+  "apiKey": "",
+  
+  // Enable server mode to expose OpenCode as A2A agent
+  "serverMode": true,
+  
+  // Server configuration
+  "port": 4000,
+  "host": "localhost",
+  
+  // Agent identity
+  "agentName": "OpenCode Agent",
+  "agentDescription": "OpenCode AI coding assistant",
+  
+  // Features
+  "streaming": true,
+  "pushNotifications": false
 }
 ```
 
 ### Configuration Options
 
-| Option | Type | Description |
-|--------|------|-------------|
-| `agentUrl` | string | Default A2A agent URL to connect to |
-| `agentCardUrl` | string | Agent Card URL for agent discovery |
-| `authToken` | string | Bearer token for authentication |
-| `apiKey` | string | API key for authentication |
-| `serverMode` | boolean | Enable A2A server mode (default: false) |
-| `port` | number | Server port (default: 4000) |
-| `host` | string | Server host (default: localhost) |
-| `serverUrl` | string | Public URL of the A2A server |
-| `agentName` | string | Name of the OpenCode agent (server mode) |
-| `agentDescription` | string | Description of the agent |
-| `streaming` | boolean | Enable streaming (default: true) |
-| `pushNotifications` | boolean | Enable push notifications (default: false) |
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `agentUrl` | string | - | Default A2A agent URL to connect to |
+| `agentCardUrl` | string | - | Agent Card URL for agent discovery |
+| `authToken` | string | - | Bearer token for authentication |
+| `apiKey` | string | - | API key for authentication |
+| `serverMode` | boolean | false | Enable A2A server mode |
+| `port` | number | 4000 | Server port (1-65535) |
+| `host` | string | localhost | Server host |
+| `serverUrl` | string | - | Public URL of the A2A server |
+| `agentName` | string | OpenCode Agent | Name of the agent |
+| `agentDescription` | string | - | Description of the agent |
+| `streaming` | boolean | true | Enable streaming |
+| `pushNotifications` | boolean | false | Enable push notifications |
 
-## Usage
+## Tools
 
-### As A2A Client
+The plugin provides 4 OpenCode tools:
 
-The plugin automatically creates an A2A client when `agentUrl` is configured. You can use the exported functions:
+| Tool | Description |
+|------|-------------|
+| `a2a_send` | Send message to A2A agent and get response |
+| `a2a_discover` | Fetch and display agent capabilities from Agent Card |
+| `a2a_task_status` | Get status of a running task |
+| `a2a_cancel` | Cancel a running task |
 
-```typescript
-import { createA2AClient, sendToA2AAgent, fetchAgentCard } from "./plugins/a2a";
+### Usage Examples
 
-// Connect to an A2A agent
-const client = await createA2AClient(
-  "http://localhost:4000",
-  "your-auth-token"
-);
+```
+# Send message to A2A agent
+a2a_send message: "Hello, help me with this code..."
 
-// Send a message
-const response = await sendToA2AAgent(client, "Hello, agent!");
+# Discover agent capabilities
+a2a_discover agentUrl: "http://localhost:4000"
 
-// Get response text
-if (response.kind === "message") {
-  console.log(response.parts[0].text);
-}
+# Get task status
+a2a_task_status taskId: "task-123"
 
-// Stream responses
-for await (const event of streamFromA2AAgent(client, "Tell me a story")) {
-  console.log(event.status.state);
-}
-
-// Fetch agent capabilities
-const agentCard = await fetchAgentCard("http://localhost:4000");
-console.log(agentCard.skills);
+# Cancel task
+a2a_cancel taskId: "task-123"
 ```
 
-### As A2A Server
+## Server Endpoints
 
-Enable server mode to make OpenCode available as an A2A agent:
+When server mode is enabled:
 
-```json
-{
-  "a2a": {
-    "serverMode": true,
-    "port": 4000,
-    "host": "localhost",
-    "agentName": "OpenCode Assistant",
-    "agentDescription": "AI coding assistant powered by OpenCode"
-  }
-}
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/.well-known/agent-card.json` | GET | Agent Card (discovery) |
+| `/a2a/jsonrpc` | POST | JSON-RPC transport |
+| `/a2a/rest` | POST | HTTP+JSON/REST transport |
+
+### JSON-RPC Methods
+
+| Method | Description |
+|--------|-------------|
+| `message/send` | Send message, returns Message or Task |
+| `tasks/get` | Get task by ID |
+| `tasks/cancel` | Cancel a running task |
+
+### REST Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/card` | GET | Get Agent Card |
+| `/v1/messages:send` | POST | Send message |
+| `/v1/messages:stream` | POST | Stream messages |
+| `/v1/tasks/:id` | GET | Get task |
+| `/v1/tasks/:id:cancel` | POST | Cancel task |
+
+## Standalone Server
+
+You can run the A2A server as a standalone process:
+
+```bash
+cd plugin/a2a
+node server.mjs
 ```
 
-The server exposes:
-- `/.well-known/agent-card.json` - Agent Card endpoint
-- `/a2a/jsonrpc` - JSON-RPC endpoint
-- `/a2a/rest` - REST endpoint
+With environment variables:
 
-### Example: Connecting to Another Agent
-
-```typescript
-// In your plugin or script
-import { createA2AClient, sendToA2AAgent } from "./plugins/a2a";
-
-async function queryExternalAgent(prompt: string) {
-  const client = await createA2AClient(
-    "https://agent.example.com",
-    process.env.A2A_TOKEN
-  );
-  
-  const result = await sendToA2AAgent(client, prompt);
-  
-  return result;
-}
+```bash
+A2A_PORT=4001 A2A_HOST=0.0.0.0 A2A_AGENT_NAME="My Agent" node server.mjs
 ```
 
 ## A2A Protocol Reference
 
-This plugin implements A2A Protocol v0.3.0. For details see:
-- Specification: https://a.org/v0.2a-protocol3.0/specification/
+This plugin implements A2A Protocol v0.3.0.
+
+- Specification: https://a2a-protocol.org/v0.3.0/specification/
 - JavaScript SDK: https://github.com/a2aproject/a2a-js
 
 ### Key Concepts
@@ -136,17 +161,7 @@ This plugin implements A2A Protocol v0.3.0. For details see:
 - **Part**: Content unit (text, file, data)
 - **Artifact**: Output generated by agent
 
-### Supported Methods
-
-- `message/send` - Send message to agent
-- `message/stream` - Stream message responses
-- `tasks/get` - Get task status
-- `tasks/cancel` - Cancel running task
-- `agent/getAuthenticatedExtendedCard` - Get agent card
-
-## Skills
-
-When in server mode, OpenCode exposes these skills:
+### Exposed Skills (Server Mode)
 
 | Skill ID | Name | Description |
 |----------|------|-------------|
@@ -158,7 +173,6 @@ When in server mode, OpenCode exposes these skills:
 
 ### Connection Issues
 
-If you can't connect to an agent:
 1. Verify the agent URL is correct
 2. Check authentication credentials
 3. Ensure the agent is running and accessible
@@ -166,10 +180,11 @@ If you can't connect to an agent:
 ### Server Not Starting
 
 Check that the port is not already in use:
+
 ```bash
 lsof -i :4000
 ```
 
 ### Authentication Errors
 
-Ensure your auth token or API key is correctly configured and has necessary permissions.
+Ensure your auth token or API key is correctly configured.
