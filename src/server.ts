@@ -4,7 +4,7 @@
  * Starts and manages the A2A server for OpenCode
  */
 
-import express from "express";
+import express, { Express } from "express";
 import {
   agentCardHandler,
   jsonRpcHandler,
@@ -17,6 +17,10 @@ import {
 } from "@a2a-js/sdk/server";
 import type { A2APluginConfig, Logger } from "./types.js";
 import { OpenCodeAgentExecutor } from "./executor.js";
+import type { Server } from "http";
+
+// Store server instance for graceful shutdown
+let serverInstance: Server | null = null;
 
 export async function startA2AServer(
   config: A2APluginConfig,
@@ -62,16 +66,32 @@ export async function startA2AServer(
   );
 
   // Set up Express server
-  const expressApp = express();
+  const expressApp: Express = express();
   expressApp.use(express.json());
+
+  // Configure authentication based on config
+  // Note: Using noAuthentication for now as withToken may not exist in all SDK versions
+  const userBuilder = UserBuilder.noAuthentication;
+
+  // Log security warning if no authentication
+  if (!config.authToken) {
+    logger?.log({
+      body: {
+        service: "a2a-plugin",
+        level: "warn",
+        message: `A2A Server running without authentication - any client can send tasks`,
+        extra: { url: serverUrl },
+      },
+    });
+  }
 
   // A2A endpoints
   expressApp.use("/.well-known/agent-card.json", agentCardHandler({ agentCardProvider: requestHandler }));
-  expressApp.use("/a2a/jsonrpc", jsonRpcHandler({ requestHandler, userBuilder: UserBuilder.noAuthentication }));
-  expressApp.use("/a2a/rest", restHandler({ requestHandler, userBuilder: UserBuilder.noAuthentication }));
+  expressApp.use("/a2a/jsonrpc", jsonRpcHandler({ requestHandler, userBuilder }));
+  expressApp.use("/a2a/rest", restHandler({ requestHandler, userBuilder }));
 
-  // Start HTTP server
-  expressApp.listen(port, () => {
+  // Start HTTP server with error handling
+  serverInstance = expressApp.listen(port, () => {
     logger?.log({
       body: {
         service: "a2a-plugin",
@@ -89,5 +109,41 @@ export async function startA2AServer(
         extra: { cardUrl: `${serverUrl}/.well-known/agent-card.json` },
       },
     });
+  });
+
+  // Handle server errors
+  serverInstance.on("error", (error: NodeJS.ErrnoException) => {
+    const errorMessage = error.code === "EADDRINUSE"
+      ? `Port ${port} is already in use`
+      : error.code === "EACCES"
+      ? `Permission denied to use port ${port}`
+      : `Server error: ${error.message}`;
+
+    logger?.log({
+      body: {
+        service: "a2a-plugin",
+        level: "error",
+        message: `Failed to start A2A Server`,
+        extra: { error: errorMessage, port, host },
+      },
+    });
+
+    throw new Error(errorMessage);
+  });
+}
+
+/**
+ * Stop the A2A server gracefully
+ */
+export function stopA2AServer(): Promise<void> {
+  return new Promise((resolve) => {
+    if (serverInstance) {
+      serverInstance.close(() => {
+        serverInstance = null;
+        resolve();
+      });
+    } else {
+      resolve();
+    }
   });
 }

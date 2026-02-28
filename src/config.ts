@@ -13,12 +13,12 @@ import type { A2APluginConfig } from "./types.js";
 const DEFAULT_CONFIG_DIR = join(homedir(), ".config", "opencode");
 
 /**
- * Strip comments and trailing commas from JSONC content
- * Handles both // and /* * / style comments
+ * Remove comments from JSONC content
  */
-function parseJSONC(content: string): Record<string, unknown> {
+function removeComments(content: string): Record<string, unknown> {
   let result = "";
   let inString = false;
+  let escapeNext = false;
   let inSingleLineComment = false;
   let inMultiLineComment = false;
   let i = 0;
@@ -26,6 +26,20 @@ function parseJSONC(content: string): Record<string, unknown> {
   while (i < content.length) {
     const char = content[i];
     const nextChar = content[i + 1];
+
+    // Handle escape sequences
+    if (escapeNext) {
+      result += char;
+      escapeNext = false;
+      i++;
+      continue;
+    }
+    if (char === "\\") {
+      result += char;
+      escapeNext = true;
+      i++;
+      continue;
+    }
 
     // Handle single-line comments
     if (!inString && !inMultiLineComment && char === "/" && nextChar === "/") {
@@ -65,8 +79,10 @@ function parseJSONC(content: string): Record<string, unknown> {
     }
 
     // Handle string literals
-    if (char === '"' && (i === 0 || content[i - 1] !== "\\")) {
-      inString = !inString;
+    if (!inSingleLineComment && !inMultiLineComment && char === '"' && !inString) {
+      inString = true;
+    } else if (inString && char === '"') {
+      inString = false;
     }
 
     // Handle trailing commas before } or ]
@@ -82,7 +98,7 @@ function parseJSONC(content: string): Record<string, unknown> {
     i++;
   }
 
-  return JSON.parse(result) as Record<string, unknown>;
+  return JSON.parse(result) as unknown as Record<string, unknown>;
 }
 
 /**
@@ -108,7 +124,7 @@ async function findConfigFile(baseDir: string): Promise<string | null> {
  * Load A2A configuration from a2a.json or a2a.jsonc
  * Returns default config if file doesn't exist or is invalid
  */
-export async function loadA2AConfig(configPath?: string): Promise<A2APluginConfig> {
+export async function loadA2AConfig(configPath?: string, logger?: { warn(message: string): void }): Promise<A2APluginConfig> {
   let path: string | undefined = configPath;
   
   // If no explicit path, try to find config file
@@ -126,8 +142,8 @@ export async function loadA2AConfig(configPath?: string): Promise<A2APluginConfi
     const content = await readFile(path, "utf-8");
     
     // Detect if it's JSONC (has comments) or plain JSON
-    const isJSONC = content.includes("//") || content.includes("/*");
-    const parsed = isJSONC ? parseJSONC(content) : JSON.parse(content);
+    const isJSONC = /\/\/|\/\*/.test(content);
+    const parsed = isJSONC ? removeComments(content) : JSON.parse(content);
     
     // Validate and sanitize configuration
     const config: A2APluginConfig = {};
@@ -167,7 +183,7 @@ export async function loadA2AConfig(configPath?: string): Promise<A2APluginConfi
     }
     
     // Number options
-    if (typeof parsed.port === "number" && parsed.port > 0 && parsed.port < 65536) {
+    if (typeof parsed.port === "number" && parsed.port >= 1 && parsed.port <= 65535) {
       config.port = parsed.port;
     }
     if (typeof parsed.host === "string") {
@@ -175,8 +191,12 @@ export async function loadA2AConfig(configPath?: string): Promise<A2APluginConfi
     }
     
     return config;
-  } catch {
-    // Return default config if file doesn't exist
+  } catch (error) {
+    // Log warning when falling back to defaults
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger?.warn(`Failed to load A2A config from ${path}: ${errorMessage}. Using default configuration.`);
+    
+    // Return default config if file doesn't exist or is invalid
     return {};
   }
 }

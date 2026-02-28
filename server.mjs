@@ -10,6 +10,7 @@ import express from "express";
 import {
   agentCardHandler,
   jsonRpcHandler,
+  restHandler,
   UserBuilder,
 } from "@a2a-js/sdk/server/express";
 import {
@@ -288,6 +289,7 @@ app.use(express.json());
 // A2A endpoints
 app.use("/.well-known/agent-card.json", agentCardHandler({ agentCardProvider: requestHandler }));
 app.use("/a2a/jsonrpc", jsonRpcHandler({ requestHandler, userBuilder: UserBuilder.noAuthentication }));
+app.use("/a2a/rest", restHandler({ requestHandler, userBuilder: UserBuilder.noAuthentication }));
 
 // Health check
 app.get("/health", (req, res) => {
@@ -299,4 +301,5 @@ app.listen(PORT, () => {
   console.log(`🚀 A2A Server started on ${SERVER_URL}`);
   console.log(`📋 Agent Card: ${SERVER_URL}/.well-known/agent-card.json`);
   console.log(`🔌 JSON-RPC: ${SERVER_URL}/a2a/jsonrpc`);
+  console.log(`🔌 REST: ${SERVER_URL}/a2a/rest`);
 });

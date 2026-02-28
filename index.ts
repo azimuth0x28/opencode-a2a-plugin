@@ -9,12 +9,28 @@
  */
 
 import { ClientFactory, ClientFactoryOptions } from "@a2a-js/sdk/client";
-import type { A2APluginConfig, A2AClientState, Logger } from "./src/types.js";
+import type { A2APluginConfig, A2AClientState, Logger, A2AClient } from "./src/types.js";
 import { AuthInterceptor } from "./src/interceptor.js";
 import { startA2AServer } from "./src/server.js";
 import { loadA2AConfig, getDefaultConfig } from "./src/config.js";
 import { setLogger, log } from "./src/utils/logger.js";
-import { a2a_send, a2a_discover, a2a_task_status, a2a_cancel, initA2ATools } from "./src/tools/a2a-tools.js";
+import { createA2ATools } from "./src/tools/a2a-tools.js";
+
+/**
+ * Sanitize URL to remove potential credentials
+ */
+function sanitizeUrl(url: string | undefined): string | undefined {
+  if (!url) return url;
+  try {
+    const parsed = new URL(url);
+    if (parsed.password) {
+      parsed.password = "***";
+    }
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
 
 // Plugin type - simplified for compatibility
 type OpenCodePlugin = (ctx: any) => Promise<any>;
@@ -23,7 +39,7 @@ type OpenCodePlugin = (ctx: any) => Promise<any>;
  * Main Plugin
  */
 export const A2APlugin: OpenCodePlugin = async (ctx) => {
-  const { app, client, $ } = ctx;
+  const { app, client } = ctx;
   
   // Load configuration from a2a.json file
   const userConfig = await loadA2AConfig();
@@ -44,12 +60,11 @@ export const A2APlugin: OpenCodePlugin = async (ctx) => {
   setLogger(logger);
 
   await log.info("plugin", "Initializing A2A plugin", {
-    agentUrl: config.agentUrl,
+    agentUrl: sanitizeUrl(config.agentUrl),
     serverMode: config.serverMode,
     port: config.port,
+    hasAuth: !!(config.authToken || config.apiKey),
   });
-
-  console.log("[A2A Plugin] Config loaded:", JSON.stringify(config));
 
   // Initialize client state
   const clientState: A2AClientState = {
@@ -64,7 +79,7 @@ export const A2APlugin: OpenCodePlugin = async (ctx) => {
     return clientState.client;
   };
 
-  // Set up authentication interceptor
+  // Set up authentication interceptor (if needed)
   if (config.authToken || config.apiKey) {
     const interceptor = new AuthInterceptor(config.authToken, config.apiKey);
     clientState.factory = new ClientFactory(
@@ -76,14 +91,14 @@ export const A2APlugin: OpenCodePlugin = async (ctx) => {
     );
   }
 
-  // Initialize A2A client if URL is provided
+  // Initialize A2A client if URL is provided (using the factory with or without auth)
   if (config.agentUrl) {
     try {
-      clientState.client = await clientState.factory.createFromUrl(config.agentUrl);
-      await log.info("plugin", "Connected to A2A agent", { agentUrl: config.agentUrl });
+      await clientGetter();
+      await log.info("plugin", "Connected to A2A agent", { agentUrl: sanitizeUrl(config.agentUrl) });
     } catch (error) {
       await log.error("plugin", "Failed to connect to A2A agent", {
-        agentUrl: config.agentUrl,
+        agentUrl: sanitizeUrl(config.agentUrl),
         error: error instanceof Error ? error.message : "Unknown error",
       });
     }
@@ -94,16 +109,13 @@ export const A2APlugin: OpenCodePlugin = async (ctx) => {
     await startA2AServer(config, logger, client);
   }
 
-  // Initialize A2A tools with config
-  initA2ATools(config, clientGetter);
+  // Initialize A2A tools with config (using factory pattern)
+  const a2aTools = createA2ATools(config, clientGetter);
 
   return {
-    // Custom tools - import from a2a-tools.ts
+    // Custom tools - use factory-created tools
     tool: {
-      a2a_send,
-      a2a_discover,
-      a2a_task_status,
-      a2a_cancel,
+      ...a2aTools,
     },
 
     // Config hook - modify OpenCode configuration
@@ -122,6 +134,7 @@ export const A2APlugin: OpenCodePlugin = async (ctx) => {
           template: `Use a2a_discover tool to discover agent at: $ARGUMENTS`,
         },
       };
+      return cfg;
     },
 
     // Event hooks

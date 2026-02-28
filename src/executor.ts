@@ -10,16 +10,21 @@ import {
   ExecutionEventBus,
 } from "@a2a-js/sdk/server";
 import { v4 as uuidv4 } from "uuid";
-import type { Logger } from "./types.js";
+import type { Logger, MessagePart } from "./types.js";
 
 // Type for OpenCode client SDK
 interface OpenCodeClient {
   session: {
     create: (params: { body: { title?: string; parentID?: string } }) => Promise<{ data?: { id: string } }>;
-    prompt: (params: { path: { id: string }; body: { parts: Array<{ type: string; text: string }>; agent?: string } }) => Promise<any>;
-    messages: (params: { path: { id: string } }) => Promise<{ data?: Array<{ info: { role: string }; parts: Array<{ type: string; text: string }> }> }>;
-    delete: (params: { path: { id: string } }) => Promise<any>;
+    prompt: (params: { path: { id: string }; body: { parts: Array<{ type: string; text: string }>; agent?: string } }) => Promise<unknown>;
+    messages: (params: { path: { id: string } }) => Promise<{ data?: SessionMessage[] }>;
+    delete: (params: { path: { id: string } }) => Promise<unknown>;
   };
+}
+
+interface SessionMessage {
+  info: { role: string };
+  parts: Array<{ type: string; text: string }>;
 }
 
 export class OpenCodeAgentExecutor {
@@ -37,11 +42,10 @@ export class OpenCodeAgentExecutor {
     const { taskId, contextId, userMessage, task } = requestContext;
 
     // Get user message text
-    const textPart = userMessage.parts.find((p: any) => p.kind === "text") as any;
+    const textPart = userMessage.parts.find((p): p is MessagePart & { kind: "text" } => p.kind === "text");
     const userText = textPart?.text || "";
 
     // 1. Publish initial Task event (if new task)
-    // This is REQUIRED for the SDK to track the task properly
     if (!task) {
       eventBus.publish({
         kind: "task",
@@ -55,7 +59,18 @@ export class OpenCodeAgentExecutor {
       });
     }
 
-    // 2. Publish "working" status update with message
+    // 2. Publish "working" status update
+    this.publishWorkingStatus(eventBus, taskId, contextId);
+
+    try {
+      const response = await this.processWithOpenCode(userText);
+      this.publishSuccess(eventBus, taskId, contextId, response);
+    } catch (error) {
+      this.publishError(eventBus, taskId, contextId, error);
+    }
+  }
+
+  private publishWorkingStatus(eventBus: ExecutionEventBus, taskId: string, contextId: string): void {
     eventBus.publish({
       kind: "status-update",
       taskId,
@@ -74,82 +89,75 @@ export class OpenCodeAgentExecutor {
       },
       final: false,
     });
+  }
 
-    try {
-      // Process with OpenCode - return real response via artifact
-      const response = await this.processWithOpenCode(userText);
+  private publishSuccess(eventBus: ExecutionEventBus, taskId: string, contextId: string, response: string): void {
+    // Publish artifact with the result
+    eventBus.publish({
+      kind: "artifact-update",
+      taskId,
+      contextId,
+      artifact: {
+        artifactId: uuidv4(),
+        name: "Result",
+        description: "The result from OpenCode agent.",
+        parts: [{ kind: "text", text: response }],
+      },
+      lastChunk: true,
+    });
 
-      // 3. Publish artifact with the result
-      eventBus.publish({
-        kind: "artifact-update",
-        taskId,
-        contextId,
-        artifact: {
-          artifactId: uuidv4(),
-          name: "Result",
-          description: "The result from OpenCode agent.",
-          parts: [{ kind: "text", text: response }],
-        },
-        lastChunk: true,
-      });
+    // Publish final status (completed)
+    eventBus.publish({
+      kind: "status-update",
+      taskId,
+      contextId,
+      status: {
+        state: "completed",
+        timestamp: new Date().toISOString(),
+      },
+      final: true,
+    });
+  }
 
-      // 4. Publish final status (completed)
-      // DO NOT call eventBus.finished() - SDK handles it automatically!
-      eventBus.publish({
-        kind: "status-update",
-        taskId,
-        contextId,
-        status: {
-          state: "completed",
-          timestamp: new Date().toISOString(),
-        },
-        final: true,
-      });
-      
-    } catch (error) {
-      // Publish error status
-      const errorMessage = `Error: ${error instanceof Error ? error.message : "Unknown error"}`;
-      
-      // Publish artifact with error
-      eventBus.publish({
-        kind: "artifact-update",
-        taskId,
-        contextId,
-        artifact: {
-          artifactId: uuidv4(),
-          name: "Error",
-          description: "Error from OpenCode agent.",
+  private publishError(eventBus: ExecutionEventBus, taskId: string, contextId: string, error: unknown): void {
+    const errorMessage = `Error: ${error instanceof Error ? error.message : "Unknown error"}`;
+    
+    // Publish artifact with error
+    eventBus.publish({
+      kind: "artifact-update",
+      taskId,
+      contextId,
+      artifact: {
+        artifactId: uuidv4(),
+        name: "Error",
+        description: "Error from OpenCode agent.",
+        parts: [{ kind: "text", text: errorMessage }],
+      },
+      lastChunk: true,
+    });
+
+    // Publish failed status
+    eventBus.publish({
+      kind: "status-update",
+      taskId,
+      contextId,
+      status: {
+        state: "failed",
+        message: {
+          kind: "message",
+          role: "agent",
+          messageId: uuidv4(),
           parts: [{ kind: "text", text: errorMessage }],
+          taskId,
+          contextId,
         },
-        lastChunk: true,
-      });
-
-      // Publish failed status
-      eventBus.publish({
-        kind: "status-update",
-        taskId,
-        contextId,
-        status: {
-          state: "failed",
-          message: {
-            kind: "message",
-            role: "agent",
-            messageId: uuidv4(),
-            parts: [{ kind: "text", text: errorMessage }],
-            taskId,
-            contextId,
-          },
-          timestamp: new Date().toISOString(),
-        },
-        final: true,
-      });
-      
-      // DO NOT call eventBus.finished() here either!
-    }
+        timestamp: new Date().toISOString(),
+      },
+      final: true,
+    });
   }
 
   async cancelTask(taskId: string, eventBus: ExecutionEventBus): Promise<void> {
-    // Publish cancelled status
     eventBus.publish({
       kind: "status-update",
       taskId,
@@ -160,8 +168,6 @@ export class OpenCodeAgentExecutor {
       },
       final: true,
     });
-    
-    // DO NOT call eventBus.finished() - SDK handles it
     
     await this.logger?.log({
       body: {
@@ -182,103 +188,141 @@ export class OpenCodeAgentExecutor {
       throw new Error("OpenCode client not available. Please configure the A2A plugin properly.");
     }
 
-    const startTime = Date.now();
-
+    const sessionId = await this.createSession(prompt);
+    
     try {
-      // 1. Create a new session for this task
-      const sessionResult = await this.client.session.create({
-        body: {
-          title: `A2A Task: ${prompt.slice(0, 50)}...`,
-        },
-      });
+      await this.sendPrompt(sessionId, prompt);
+      const response = await this.pollForResponse(sessionId);
+      return response;
+    } finally {
+      await this.cleanupSession(sessionId);
+    }
+  }
 
-      if (!sessionResult.data?.id) {
-        throw new Error("Failed to create OpenCode session");
+  private async createSession(prompt: string): Promise<string> {
+    if (!this.client) {
+      throw new Error("OpenCode client not initialized");
+    }
+    const sessionResult = await this.client.session.create({
+      body: {
+        title: `A2A Task: ${prompt.slice(0, 50)}...`,
+      },
+    });
+
+    if (!sessionResult.data?.id) {
+      throw new Error("Failed to create OpenCode session");
+    }
+
+    return sessionResult.data.id;
+  }
+
+  private async sendPrompt(sessionId: string, prompt: string): Promise<void> {
+    if (!this.client) {
+      throw new Error("OpenCode client not initialized");
+    }
+    await this.client.session.prompt({
+      path: { id: sessionId },
+      body: {
+        parts: [{ type: "text", text: prompt }],
+      },
+    });
+  }
+
+  private async pollForResponse(sessionId: string): Promise<string> {
+    const startTime = Date.now();
+    let pollInterval = 500;
+    const maxInterval = 5000;
+
+    while (Date.now() - startTime < this.timeout) {
+      await new Promise((resolve) => setTimeout(resolve, pollInterval));
+      
+      // Exponential backoff
+      pollInterval = Math.min(pollInterval * 1.5, maxInterval);
+
+      const response = await this.checkForResponse(sessionId);
+      if (response) {
+        const elapsed = Date.now() - startTime;
+        return response || `OpenCode processed your request (${elapsed}ms)`;
       }
+    }
 
-      const sessionId = sessionResult.data.id;
+    // Timeout reached - try to get whatever we have
+    const finalResponse = await this.getFinalResponse(sessionId);
+    return finalResponse || `OpenCode timeout after ${this.timeout}ms`;
+  }
 
-      // 2. Send the prompt to the session
-      await this.client.session.prompt({
+  private async checkForResponse(sessionId: string): Promise<string | null> {
+    if (!this.client) {
+      return null;
+    }
+    try {
+      const messagesResult = await this.client.session.messages({
         path: { id: sessionId },
-        body: {
-          parts: [{ type: "text", text: prompt }],
-        },
       });
 
-      // 3. Wait for completion (poll for idle or timeout)
-      const pollInterval = 1000;
-      const maxPolls = Math.ceil(this.timeout / pollInterval);
-      let polls = 0;
+      const messages = messagesResult.data || [];
+      const assistantMessages = messages.filter((m) => m.info?.role === "assistant");
 
-      while (polls < maxPolls) {
-        await new Promise((resolve) => setTimeout(resolve, pollInterval));
-        polls++;
-
-        // Check if session is still running by trying to get messages
-        // If we can get messages and there's an assistant response, we're done
-        try {
-          const messagesResult = await this.client.session.messages({
-            path: { id: sessionId },
-          });
-
-          const messages = messagesResult.data || [];
-          
-          // Find the last assistant message
-          const assistantMessages = messages.filter(
-            (m: any) => m.info?.role === "assistant"
-          );
-
-          if (assistantMessages.length > 0) {
-            // Get the last assistant message's text parts
-            const lastAssistant = assistantMessages[assistantMessages.length - 1];
-            const textParts = lastAssistant.parts?.filter((p: any) => p.type === "text") || [];
-            
-            if (textParts.length > 0) {
-              const response = textParts.map((p: any) => p.text).join("\n");
-              const elapsed = Date.now() - startTime;
-              
-              // Clean up the session
-              try {
-                await this.client.session.delete({ path: { id: sessionId } });
-              } catch {
-                // Ignore cleanup errors
-              }
-
-              return response || `OpenCode processed your request (${elapsed}ms)`;
-            }
-          }
-        } catch {
-          // Session might have been deleted or errored, continue polling
-        }
-      }
-
-      // Timeout reached - try to get whatever we have
-      try {
-        const messagesResult = await this.client.session.messages({
-          path: { id: sessionId },
-        });
-        const messages = messagesResult.data || [];
-        const assistantMessages = messages.filter((m: any) => m.info?.role === "assistant");
+      if (assistantMessages.length > 0) {
+        const lastAssistant = assistantMessages[assistantMessages.length - 1];
+        const textParts = lastAssistant.parts?.filter((p) => p.type === "text") || [];
         
-        if (assistantMessages.length > 0) {
-          const lastAssistant = assistantMessages[assistantMessages.length - 1];
-          const textParts = lastAssistant.parts?.filter((p: any) => p.type === "text") || [];
-          if (textParts.length > 0) {
-            return textParts.map((p: any) => p.text).join("\n");
-          }
+        if (textParts.length > 0) {
+          return textParts.map((p) => p.text).join("\n");
         }
-      } catch {
-        // Ignore
       }
-
-      throw new Error(`OpenCode timeout after ${this.timeout}ms`);
-
     } catch (error) {
-      if (error instanceof Error && error.message.includes("timeout")) {
-        throw error;
+      // Log the error for debugging but continue polling
+      this.logger?.log({
+        body: {
+          service: "a2a-plugin",
+          level: "warn",
+          message: `Error checking for response`,
+          extra: { sessionId, error: error instanceof Error ? error.message : String(error) },
+        },
+      });
+    }
+    
+    return null;
+  }
+
+  private async getFinalResponse(sessionId: string): Promise<string | null> {
+    if (!this.client) {
+      return null;
+    }
+    try {
+      const messagesResult = await this.client.session.messages({
+        path: { id: sessionId },
+      });
+      const messages = messagesResult.data || [];
+      const assistantMessages = messages.filter((m) => m.info?.role === "assistant");
+      
+      if (assistantMessages.length > 0) {
+        const lastAssistant = assistantMessages[assistantMessages.length - 1];
+        const textParts = lastAssistant.parts?.filter((p) => p.type === "text") || [];
+        if (textParts.length > 0) {
+          return textParts.map((p) => p.text).join("\n");
+        }
       }
-      throw new Error(`OpenCode execution failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } catch (error) {
+      this.logger?.log({
+        body: {
+          service: "a2a-plugin",
+          level: "warn",
+          message: `Error getting final response`,
+          extra: { sessionId, error: error instanceof Error ? error.message : String(error) },
+        },
+      });
+    }
+    
+    return null;
+  }
+
+  private async cleanupSession(sessionId: string): Promise<void> {
+    try {
+      await this.client?.session.delete({ path: { id: sessionId } });
+    } catch {
+      // Ignore cleanup errors
     }
   }
 }
